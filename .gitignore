@@ -1,0 +1,21 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Arduino build output (regenerate with arduino-cli compile --export-binaries)
+build/
+*.elf
+*.map
+
+# Brain data lives in ~/fly-data, never in the repo
+fly-data/
+*.npz
+
+# Local tooling / scratch
+.claude/
+*.log
+tool-results/
+Thumbs.db
+.DS_Store

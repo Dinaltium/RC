@@ -1,0 +1,9 @@
+# Host-side FruitFly controller. CPU-only by default (numba). Works on
+# x86-64 laptops and aarch64 (Termux proot Debian) with wheels from PyPI.
+flybrain==0.1.0
+numpy>=2.0
+scipy>=1.13
+numba>=0.61
+pillow>=10.0
+# Optional NVIDIA GPU (CUDA 12) on the laptop:
+#   pip install "flybrain[gpu]"

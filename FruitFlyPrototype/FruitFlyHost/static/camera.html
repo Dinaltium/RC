@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fly Eye — phone camera</title>
+<style>
+  body{margin:0;background:#0E1620;color:#E8EEF2;font-family:"Instrument Sans",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px}
+  video{width:100%;max-width:480px;border-radius:6px;background:#000}
+  button{font-size:1.05em;padding:12px 18px;border:1px solid #22303E;border-radius:6px;background:#15202B;color:#E8EEF2}
+  button:not([disabled]):first-of-type{background:#5FD3F0;color:#0E1620;border-color:#5FD3F0}
+  button.stop{background:transparent;color:#FF6B5C;border-color:#FF6B5C}
+  code{color:#F2B24B}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .stat{font-size:.9em;color:#7F93A6}
+  select,input{font-size:1em;padding:6px;border-radius:6px;border:1px solid #22303E;background:#15202B;color:#E8EEF2}
+</style>
+</head>
+<body>
+<h3 style="margin:4px 0;font-weight:600">Fly eye</h3><div class="stat">This phone's camera becomes what the fly sees.</div>
+<video id="v" autoplay playsinline muted></video>
+<div class="row">
+  <label>Camera <select id="facing"><option value="environment">rear</option><option value="user">front</option></select></label>
+  <label>FPS <input id="fps" type="number" min="1" max="15" value="8" style="width:60px"></label>
+  <label>Width <input id="w" type="number" min="160" max="640" step="80" value="320" style="width:70px"></label>
+</div>
+<div class="row">
+  <button id="start">Start streaming</button>
+  <button id="stop" class="stop" disabled>Stop</button>
+</div>
+<div class="stat" id="stat">idle</div>
+<p class="stat" style="max-width:480px">Open this page on the phone at <code>http://&lt;host-ip&gt;:&lt;port&gt;/camera</code>.
+Mobile browsers require HTTPS or <code>localhost</code> for camera access; on Android Chrome add this origin under
+<code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, or run the host on the phone itself (Termux) and open <code>http://127.0.0.1</code>.</p>
+<script>
+const v=document.getElementById('v'), stat=document.getElementById('stat');
+const canvas=document.createElement('canvas'); let stream=null, timer=null, sent=0, failed=0;
+async function start(){
+  const facing=document.getElementById('facing').value;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:640}},audio:false});
+  }catch(e){stat.textContent='camera error: '+e.message;return;}
+  v.srcObject=stream;
+  const fps=+document.getElementById('fps').value||8;
+  document.getElementById('start').disabled=true;document.getElementById('stop').disabled=false;
+  timer=setInterval(push,1000/fps);
+}
+function push(){
+  if(!v.videoWidth) return;
+  const w=+document.getElementById('w').value||320, h=Math.round(w*v.videoHeight/v.videoWidth);
+  canvas.width=w;canvas.height=h;
+  canvas.getContext('2d').drawImage(v,0,0,w,h);
+  canvas.toBlob(b=>{
+    if(!b) return;
+    fetch('/camera/push',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b})
+      .then(r=>{ if(r.ok) sent++; else failed++; })
+      .catch(()=>failed++)
+      .finally(()=>{stat.textContent=`sent ${sent}  failed ${failed}  ${w}x${h}`;});
+  },'image/jpeg',0.6);
+}
+function stop(){
+  clearInterval(timer); timer=null;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  document.getElementById('start').disabled=false;document.getElementById('stop').disabled=true;
+  stat.textContent='stopped';
+}
+document.getElementById('start').onclick=start;
+document.getElementById('stop').onclick=stop;
+</script>
+</body>
+</html>

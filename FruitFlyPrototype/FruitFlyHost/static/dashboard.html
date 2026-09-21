@@ -33,6 +33,8 @@
   button.estop:hover{background:var(--stop);color:#1a0906}
   button.clear:hover,a.btn:hover{background:var(--panel)}
   a.btn.drive{border-color:var(--L);color:var(--L)}
+  button.cam.on{background:var(--L);color:#0E1620;border-color:var(--L)}
+  .camnote{color:var(--muted);font-size:12px;margin-top:4px}
   .bar{display:none}
 
   main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);min-height:0}
@@ -97,6 +99,7 @@
     .decision{position:static;order:1;background:none;padding:16px 16px 6px;grid-template-columns:1fr;gap:4px}
     .decision .verb{font-size:40px;grid-row:auto;margin-bottom:6px}
     .decision .verb small{font-size:18px}
+    .decision .camnote{grid-column:1}
     .eyes{display:flex;order:2;gap:10px;padding:8px 16px 14px}
     .eye{position:static;width:auto;flex:1;min-width:0}
     .eye canvas{width:100%;height:auto;aspect-ratio:4/3}
@@ -127,6 +130,7 @@
     <span class="desk">spikes per tick <b id="s_spk">–</b></span>
   </div>
   <div class="actions">
+    <button class="cam" id="camBtn" onclick="toggleCam()" hidden>Use this camera</button>
     <a class="btn drive" href="/controls">Drive</a>
     <button class="estop" onclick="post('/api/estop')">Emergency stop</button>
     <button class="clear" onclick="post('/api/clear')">Clear stop</button>
@@ -147,6 +151,7 @@
       <div class="verb stop" id="verb">–</div>
       <div class="why" id="why">Waiting for the first tick.</div>
       <div class="sent" id="sent"></div>
+      <div class="camnote" id="camstat" style="grid-column:2"></div>
     </div>
   </div>
 
@@ -181,14 +186,29 @@
 </div>
 
 <div class="bar">
+  <button class="cam" id="camBtnM" onclick="toggleCam()" hidden>Camera</button>
   <button class="estop" onclick="post('/api/estop')">Emergency stop</button>
   <button class="clear" onclick="post('/api/clear')">Clear stop</button>
   <a class="btn drive" href="/controls">Drive</a>
   <div class="mode">driven by<b id="m_mode">–</b></div>
 </div>
 
+<script src="/eyecam.js"></script>
 <script>
 const $=id=>document.getElementById(id);
+/* ================= this phone's camera, from the dashboard itself ================= */
+const cam=EyeCam({onStatus:t=>{const el=$('camstat'); if(el) el.textContent=t;}});
+function camButtons(){ return [$('camBtn'),$('camBtnM')].filter(Boolean); }
+async function toggleCam(){
+  if(cam.running){ cam.stop(); }
+  else { const ok=await cam.start({facing:'environment'}); if(!ok) return; }
+  camButtons().forEach(b=>{ b.classList.toggle('on',cam.running); b.textContent=cam.running?(b.id==='camBtn'?'Stop camera':'Camera on'):(b.id==='camBtn'?'Use this camera':'Camera'); });
+}
+let camShown=false;
+function showCamButtons(source){
+  if(camShown||source!=='push') return;
+  camShown=true; camButtons().forEach(b=>b.hidden=false);
+}
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const C={L:css('--L'),R:css('--R'),spike:css('--spike'),muted:css('--muted'),faint:css('--faint'),ink:css('--ink'),stop:css('--stop'),go:css('--go')};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -337,7 +357,8 @@ async function poll(){
   if(!s.ok){ $('why').textContent=s.note||'Waiting'; return; }
   const b=s.brain, r=s.robot, d=s.decision, manual=s.mode==='manual';
   $('s_robot').textContent=r.connected?(r.sim?'simulated':'online'):'offline'; setDot('d_robot',r.connected?(r.sim?'warn':'on'):'off');
-  $('s_cam').textContent=s.camera.source==='none'?'off':(s.camera.has_frame?s.camera.source:s.camera.source+', no frames'); setDot('d_cam',s.camera.has_frame?'on':s.camera.source==='none'?'':'warn');
+  showCamButtons(s.camera.source);
+  $('s_cam').textContent=s.camera.source==='none'?'off':(s.camera.has_frame?s.camera.source:(cam.running?'push, paused':'push, no frames — tap Camera')); setDot('d_cam',s.camera.has_frame?'on':s.camera.source==='none'?'':'warn');
   const motors=s.policy.enable_motors?['enabled',s.policy.demo_forward?'forward':null,s.policy.allow_turns?'turns':null].filter(Boolean).join(', '):'dry run';
   $('s_motors').textContent=motors; $('t_motors').textContent=motors;
   $('s_step').textContent=b.step_ms+' ms'; $('t_step').textContent=b.step_ms+' ms';

@@ -172,6 +172,8 @@ class Dashboard:
                     self._send(200, (STATIC / "camera.html").read_bytes(), "text/html; charset=utf-8")
                 elif path == "/controls":
                     self._send(200, (STATIC / "controls.html").read_bytes(), "text/html; charset=utf-8")
+                elif path == "/eyecam.js":
+                    self._send(200, (STATIC / "eyecam.js").read_bytes(), "application/javascript; charset=utf-8")
                 elif path == "/api/mode":
                     self._json({"mode": dash.mode})
                 elif path == "/api/state":

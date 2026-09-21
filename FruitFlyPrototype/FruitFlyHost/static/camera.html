@@ -3,22 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fly Eye — phone camera</title>
+<title>Fly eye — phone camera</title>
 <style>
-  body{margin:0;background:#0E1620;color:#E8EEF2;font-family:"Instrument Sans",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px}
-  video{width:100%;max-width:480px;border-radius:6px;background:#000}
+  body{margin:0;background:#0E1620;color:#E8EEF2;font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px}
+  #preview{width:100%;max-width:480px;aspect-ratio:4/3;border-radius:6px;background:#000;object-fit:cover}
   button{font-size:1.05em;padding:12px 18px;border:1px solid #22303E;border-radius:6px;background:#15202B;color:#E8EEF2}
-  button:not([disabled]):first-of-type{background:#5FD3F0;color:#0E1620;border-color:#5FD3F0}
+  button#start{background:#5FD3F0;color:#0E1620;border-color:#5FD3F0}
   button.stop{background:transparent;color:#FF6B5C;border-color:#FF6B5C}
+  button[disabled]{opacity:.45}
   code{color:#F2B24B}
+  a{color:#5FD3F0}
   .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center}
   .stat{font-size:.9em;color:#7F93A6}
+  .warn{color:#F2B24B;font-size:.9em;max-width:480px;text-align:center}
   select,input{font-size:1em;padding:6px;border-radius:6px;border:1px solid #22303E;background:#15202B;color:#E8EEF2}
 </style>
 </head>
 <body>
 <h3 style="margin:4px 0;font-weight:600">Fly eye</h3><div class="stat">This phone's camera becomes what the fly sees.</div>
-<video id="v" autoplay playsinline muted></video>
+<div id="preview"></div>
 <div class="row">
   <label>Camera <select id="facing"><option value="environment">rear</option><option value="user">front</option></select></label>
   <label>FPS <input id="fps" type="number" min="1" max="15" value="8" style="width:60px"></label>
@@ -29,43 +32,19 @@
   <button id="stop" class="stop" disabled>Stop</button>
 </div>
 <div class="stat" id="stat">idle</div>
-<p class="stat" style="max-width:480px">Open this page on the phone at <code>http://&lt;host-ip&gt;:&lt;port&gt;/camera</code>.
-Mobile browsers require HTTPS or <code>localhost</code> for camera access; on Android Chrome add this origin under
-<code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, or run the host on the phone itself (Termux) and open <code>http://127.0.0.1</code>.</p>
+<p class="warn">Keep this tab in front, or better: go to the <a href="/">dashboard</a> and tap <b>Use this camera</b> there — one tab, nothing to switch. A tab in the background freezes its camera and the fly would see a still picture; this page stops sending when that happens.</p>
+<p class="stat" style="max-width:480px">Mobile browsers only allow the camera on HTTPS or <code>127.0.0.1</code>. Running the host on the phone: open <code>http://127.0.0.1:8642/camera</code>. From another device: add the origin under <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>.</p>
+<script src="/eyecam.js"></script>
 <script>
-const v=document.getElementById('v'), stat=document.getElementById('stat');
-const canvas=document.createElement('canvas'); let stream=null, timer=null, sent=0, failed=0;
-async function start(){
-  const facing=document.getElementById('facing').value;
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:640}},audio:false});
-  }catch(e){stat.textContent='camera error: '+e.message;return;}
-  v.srcObject=stream;
-  const fps=+document.getElementById('fps').value||8;
-  document.getElementById('start').disabled=true;document.getElementById('stop').disabled=false;
-  timer=setInterval(push,1000/fps);
-}
-function push(){
-  if(!v.videoWidth) return;
-  const w=+document.getElementById('w').value||320, h=Math.round(w*v.videoHeight/v.videoWidth);
-  canvas.width=w;canvas.height=h;
-  canvas.getContext('2d').drawImage(v,0,0,w,h);
-  canvas.toBlob(b=>{
-    if(!b) return;
-    fetch('/camera/push',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b})
-      .then(r=>{ if(r.ok) sent++; else failed++; })
-      .catch(()=>failed++)
-      .finally(()=>{stat.textContent=`sent ${sent}  failed ${failed}  ${w}x${h}`;});
-  },'image/jpeg',0.6);
-}
-function stop(){
-  clearInterval(timer); timer=null;
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
-  document.getElementById('start').disabled=false;document.getElementById('stop').disabled=true;
-  stat.textContent='stopped';
-}
-document.getElementById('start').onclick=start;
-document.getElementById('stop').onclick=stop;
+const stat=document.getElementById('stat');
+const cam=EyeCam({onStatus:t=>{stat.textContent=t;}});
+cam.video.id='v'; cam.video.style.width='100%'; cam.video.style.maxWidth='480px'; cam.video.style.borderRadius='6px';
+document.getElementById('preview').replaceWith(cam.video);
+document.getElementById('start').onclick=async()=>{
+  const ok=await cam.start({facing:document.getElementById('facing').value,fps:+document.getElementById('fps').value||8,width:+document.getElementById('w').value||320});
+  if(ok){document.getElementById('start').disabled=true;document.getElementById('stop').disabled=false;}
+};
+document.getElementById('stop').onclick=()=>{cam.stop();document.getElementById('start').disabled=false;document.getElementById('stop').disabled=true;};
 </script>
 </body>
 </html>

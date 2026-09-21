@@ -385,17 +385,25 @@ Start the host with the push camera:
 ./run.sh --sim-robot --camera push --quiet
 ```
 
-In Chrome open:
+In Chrome open the dashboard itself:
 
 ```
-http://127.0.0.1:8642/camera
+http://127.0.0.1:8642/
 ```
 
-Tap **Start streaming** and allow the camera. The page keeps sending frames
-as long as it is on screen. Put Chrome and Termux in split-screen, or at
-least keep Chrome in the foreground: Android pauses background tabs and the
-frames stop. On the dashboard the two "eye" tiles should now show the
-picture and "camera push" should turn green.
+Tap the **Camera** button in the bottom bar (on a laptop screen it is
+**Use this camera** in the header) and allow the camera. The dashboard now
+streams the phone camera to the fly by itself — one tab, nothing to switch.
+The two "eye" tiles show the picture and "camera push" turns green.
+
+Do not use a second tab for the camera. Android freezes the camera of any
+tab that is not in front, so the fly would keep seeing the last picture
+from that tab. If you do use `http://127.0.0.1:8642/camera`, it now stops
+sending when it is hidden, and the dashboard says "push, no frames".
+
+Keep Chrome in the foreground while the fly runs (split-screen with Termux
+is fine). The line under the decision on the dashboard says "streaming
+320x240 sent N" while frames are flowing, and "paused" when they are not.
 
 ### Option B — the IP Webcam app (survives screen-off)
 
@@ -562,8 +570,8 @@ cd FruitFlyHost
 ./run.sh --camera push --enable-motors --demo-forward --allow-turns
 ```
 
-Then join the RobotPrototype Wi-Fi, open `http://127.0.0.1:8642/camera`
-and tap Start streaming, and watch `http://127.0.0.1:8642/`.
+Then join the RobotPrototype Wi-Fi, open `http://127.0.0.1:8642/`, tap
+**Camera** in the bottom bar, and watch the fly drive.
 
 To get the newest code when the owner has changed something (needs
 internet, so do it before joining the robot Wi-Fi):
@@ -589,7 +597,7 @@ venv active.
 | `ModuleNotFoundError: No module named 'flybrain'` | The venv is not active | `cd ~/RC/FruitFlyPrototype` then `. .venv/bin/activate` (prompt shows `(.venv)`) |
 | `FileNotFoundError ... brain.npz` | Brain files missing or `FLY_DATA` points to the wrong place | `python -m flybrain download`, or check `echo $FLY_DATA` |
 | Chrome says "site can't be reached" for 127.0.0.1:8642 | The host is not running, or you typed the address wrong | Look at the Termux tab: is the `dashboard http://...` line there? Address is `http://127.0.0.1:8642/` (not https) |
-| Dashboard shows "camera push, no frames" | The /camera page is not streaming, or Chrome is in the background | Open `/camera`, tap Start streaming, keep Chrome on screen (split-screen) |
+| Dashboard shows "push, no frames" | Camera not started, or Chrome is in the background | Tap **Camera** on the dashboard; keep Chrome on screen (split-screen). Don't run the camera in a second tab |
 | Dashboard shows "robot offline" | The phone is not on the RobotPrototype Wi-Fi, or the robot is off | Re-join the Wi-Fi, run the `curl ... /api/status` check from section 10 |
 | Robot goes offline every minute or so | Android switched back to mobile data | Disable "switch to mobile data automatically" for this network; keep the phone near the robot |
 | `connection error ... sending no motion` in the host output | Same Wi-Fi drop, seen from the host | As above; the robot stops itself after 1.5 s without contact |

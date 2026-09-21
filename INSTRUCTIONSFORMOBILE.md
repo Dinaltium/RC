@@ -93,7 +93,11 @@ Stop with Ctrl+C.
 ## Step 4 — camera on the same phone
 
 Preferred (no app): run with `--camera push`, then open
-`http://127.0.0.1:8642/camera` in Chrome on the phone and tap **Start
+`http://127.0.0.1:8642/` in Chrome on the phone and tap **Camera** in the
+bottom bar (the dashboard streams the camera itself — do not use a second
+tab: Android freezes a background tab's camera and the fly would see a
+still picture). The old `/camera` page still exists and stops sending when
+hidden. Legacy text follows: open `/camera` and tap **Start
 streaming**. `127.0.0.1` is a secure context so `getUserMedia` works.
 Chrome must stay in the foreground or split-screen (Android pauses
 background tabs).

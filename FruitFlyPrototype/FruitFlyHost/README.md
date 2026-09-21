@@ -59,7 +59,10 @@ python FruitFlyHost\fruitfly_bridge.py --camera push --enable-motors --demo-forw
 Pick one of:
 
 **A. Browser push (no app).** Start the bridge with `--camera push`, open
-`http://<host-ip>:8642/camera` on the phone, tap *Start streaming*. The page
+`http://<host-ip>:8642/` on the phone and tap *Camera* (bottom bar) — the
+dashboard streams the camera itself via `static/eyecam.js`, so no tab
+switching; a background tab's camera is frozen by Android, and `eyecam.js`
+stops sending in that case. `/camera` is the standalone page; tap *Start streaming*. The page
 captures the rear camera with `getUserMedia` and POSTs JPEGs to the host.
 Mobile browsers only allow camera access from HTTPS or `localhost`; for a
 plain-HTTP laptop host enable

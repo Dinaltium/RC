@@ -25,6 +25,7 @@
 #include "espnow_control.h"
 #include "bluetooth_control.h"
 #include "web_server.h"
+#include "oled.h"
 #include <WiFi.h>
 
 // ============================================================
@@ -141,6 +142,7 @@ void setup() {
 
     // Web server (after Wi-Fi is up)
     webServerInit();
+    oledInit();          // after Wi-Fi so the AP address can be shown
 
     // Print MAC for ESP-NOW peer setup
     Serial.print(F("[BOOT] MAC Address: "));
@@ -179,6 +181,7 @@ void loop() {
     // 6. Handle web server
     webServerHandle();
 
-    // 7. Periodic status log
+    // 7. Periodic status log + display
     logStatus();
+    oledUpdate();
 }

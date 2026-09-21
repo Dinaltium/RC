@@ -45,6 +45,11 @@ constexpr bool FR_INVERT = false;
 constexpr bool RL_INVERT = false;
 constexpr bool RR_INVERT = false;
 
+// The chassis was wired with the left and right drivers swapped, so LEFT
+// turned right. Rather than re-wire, swap the pin tables in software.
+// Set false if you rebuild the harness the "correct" way round.
+constexpr bool SWAP_LEFT_RIGHT = true;
+
 // ============================================================
 // PWM Configuration
 // ============================================================
@@ -112,6 +117,17 @@ constexpr bool CLIFF_FAIL_SAFE = false;
 constexpr uint8_t  BUMP_FRONT_PIN = 34;
 constexpr uint8_t  BUMP_REAR_PIN  = 35;
 constexpr uint32_t BUMP_DEBOUNCE_MS = 20;
+
+// ============================================================
+// OLED status display — SSD1306 128x64 on the shared I2C bus (21/22)
+// Needs the "Adafruit SSD1306" + "Adafruit GFX Library" libraries.
+// If no display answers at OLED_ADDR the firmware logs once and carries on.
+// ============================================================
+#define ENABLE_OLED
+constexpr uint8_t  OLED_ADDR        = 0x3C;   // 0x3D on some 128x64 modules
+constexpr uint8_t  OLED_WIDTH       = 128;
+constexpr uint8_t  OLED_HEIGHT      = 64;
+constexpr uint32_t OLED_INTERVAL_MS = 200;
 
 // ============================================================
 // Obstacle Safety Thresholds (cm)

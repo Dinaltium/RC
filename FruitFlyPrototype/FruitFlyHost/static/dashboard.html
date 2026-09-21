@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Fly brain, live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -13,46 +13,47 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--field);color:var(--ink);font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  body{margin:0;background:var(--field);color:var(--ink);font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
        font-size:15px;line-height:1.35;font-variant-numeric:tabular-nums;overflow:hidden}
-  button{font:inherit}
+  button,a.btn{font:inherit}
   :focus-visible{outline:2px solid var(--L);outline-offset:2px}
 
   /* ---------- frame ---------- */
   .app{display:grid;grid-template-rows:auto 1fr;height:100vh}
   header{display:flex;align-items:baseline;gap:22px;padding:12px 20px 10px;border-bottom:1px solid var(--rule)}
-  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
+  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
   header h1 small{font-weight:400;color:var(--muted);margin-left:8px;font-size:14px}
   .status{display:flex;gap:18px;flex:1;flex-wrap:wrap;color:var(--muted);font-size:14px}
   .status b{color:var(--ink);font-weight:500}
-  .status .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--faint);margin-right:6px;vertical-align:1px}
-  .status .dot.on{background:var(--go)} .status .dot.warn{background:var(--R)} .status .dot.off{background:var(--stop)}
-  .actions{display:flex;gap:8px}
-  .actions button{border:1px solid var(--rule);background:transparent;color:var(--ink);padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:500}
-  .actions button.estop{border-color:var(--stop);color:var(--stop)}
-  .actions button.estop:hover{background:var(--stop);color:#1a0906}
-  .actions button.clear:hover{background:var(--panel)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--faint);margin-right:6px;vertical-align:1px}
+  .dot.on{background:var(--go)} .dot.warn{background:var(--R)} .dot.off{background:var(--stop)}
+  .actions{display:flex;gap:8px;align-items:center}
+  .actions button,.actions a.btn,.bar button,.bar a.btn{border:1px solid var(--rule);background:transparent;color:var(--ink);padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:500;text-decoration:none;display:inline-block;line-height:1.3}
+  button.estop{border-color:var(--stop);color:var(--stop)}
+  button.estop:hover{background:var(--stop);color:#1a0906}
+  button.clear:hover,a.btn:hover{background:var(--panel)}
+  a.btn.drive{border-color:var(--L);color:var(--L)}
+  .bar{display:none}
 
   main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);min-height:0}
-  @media(max-width:900px){body{overflow:auto}.app{height:auto}main{grid-template-columns:1fr}
-    header{flex-wrap:wrap;gap:10px 16px}header h1{flex-basis:100%}header h1 small{display:block;margin:2px 0 0}
-    .status{gap:10px 14px;font-size:13px}.actions{margin-left:auto}}
 
   /* ---------- hero: anatomy ---------- */
-  .stage{position:relative;min-height:420px;border-right:1px solid var(--rule)}
-  @media(max-width:900px){.stage{border-right:0;border-bottom:1px solid var(--rule);height:70vh}}
+  .view{position:relative;min-height:420px;border-right:1px solid var(--rule)}
+  .stage{position:absolute;inset:0}
   #brain{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
   #brain:active{cursor:grabbing}
   .stage .caption{position:absolute;left:18px;top:14px;color:var(--muted);font-size:13px;pointer-events:none}
   .stage .caption b{color:var(--ink);font-weight:500}
-  .eye{position:absolute;top:44px;width:104px}
+  .caption .long{display:inline} .caption .short{display:none}
+  .eyes{display:contents}
+  .eye{position:absolute;top:44px;width:104px;z-index:1}
   .eye.left{left:18px} .eye.right{right:18px}
   .eye canvas{width:104px;height:78px;border-radius:4px;background:#000;display:block;image-rendering:pixelated}
   .eye .tag{font-size:12px;margin-top:5px;display:flex;justify-content:space-between}
   .eye.left .tag{color:var(--L)} .eye.right .tag{color:var(--R)}
   .eye .tag span{color:var(--muted)}
 
-  .decision{position:absolute;left:0;right:0;bottom:0;padding:16px 20px 18px;
+  .decision{position:absolute;left:0;right:0;bottom:0;padding:16px 20px 18px;z-index:1;
             background:linear-gradient(to top,rgba(14,22,32,.96) 60%,rgba(14,22,32,0));display:grid;grid-template-columns:auto 1fr;gap:4px 22px;align-items:baseline}
   .decision .verb{font-size:44px;font-weight:700;letter-spacing:-.02em;line-height:1;grid-row:span 2}
   .decision .verb.stop{color:var(--stop)} .decision .verb.go{color:var(--go)} .decision .verb.turn{color:var(--turn)}
@@ -78,6 +79,40 @@
   .telemetry div span{display:block;color:var(--muted);font-size:12px}
   .telemetry div b{font-weight:500;font-size:17px}
   .telemetry b.bad{color:var(--stop)}
+  .telemetry b.manual{color:var(--turn)}
+  .mob{display:none}
+
+  /* ---------- phone ---------- */
+  @media(max-width:900px){
+    body{overflow:auto;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+    .app{height:auto;grid-template-rows:auto auto}
+    header{gap:14px;padding:10px 16px;align-items:center;position:sticky;top:0;background:var(--field);z-index:3}
+    header h1{font-size:17px}
+    header h1 small{display:none}
+    .status{gap:12px;font-size:13px;flex-wrap:nowrap;overflow:hidden}
+    .status .desk{display:none}
+    .actions{display:none}
+    main{grid-template-columns:1fr}
+    .view{display:flex;flex-direction:column;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}
+    .decision{position:static;order:1;background:none;padding:16px 16px 6px;grid-template-columns:1fr;gap:4px}
+    .decision .verb{font-size:40px;grid-row:auto;margin-bottom:6px}
+    .decision .verb small{font-size:18px}
+    .eyes{display:flex;order:2;gap:10px;padding:8px 16px 14px}
+    .eye{position:static;width:auto;flex:1;min-width:0}
+    .eye canvas{width:100%;height:auto;aspect-ratio:4/3}
+    .stage{position:relative;order:3;height:45vh;min-height:240px;border-top:1px solid var(--rule)}
+    .caption .long{display:none} .caption .short{display:inline}
+    aside{display:block;overflow:visible}
+    .telemetry{grid-template-columns:repeat(2,1fr)}
+    .mob{display:block}
+    .bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:4;gap:8px;align-items:center;
+         padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--field);border-top:1px solid var(--rule)}
+    .bar button,.bar a.btn{padding:11px 12px;flex:1;text-align:center;white-space:nowrap}
+    .bar .mode{flex:0 0 auto;font-size:12px;color:var(--muted);padding:0 4px;line-height:1.2;text-align:right}
+    .bar .mode b{display:block;color:var(--ink);font-weight:500;font-size:13px}
+    .bar .mode b.manual{color:var(--turn)}
+  }
+  @media(max-width:360px){.bar button,.bar a.btn{padding:11px 8px;font-size:14px}}
 </style>
 </head>
 <body>
@@ -87,22 +122,27 @@
   <div class="status">
     <span><i class="dot" id="d_robot"></i>robot <b id="s_robot">connecting</b></span>
     <span><i class="dot" id="d_cam"></i>camera <b id="s_cam">–</b></span>
-    <span>motors <b id="s_motors">–</b></span>
-    <span>brain step <b id="s_step">–</b></span>
-    <span>spikes per tick <b id="s_spk">–</b></span>
+    <span class="desk">motors <b id="s_motors">–</b></span>
+    <span class="desk">brain step <b id="s_step">–</b></span>
+    <span class="desk">spikes per tick <b id="s_spk">–</b></span>
   </div>
   <div class="actions">
+    <a class="btn drive" href="/controls">Drive</a>
     <button class="estop" onclick="post('/api/estop')">Emergency stop</button>
     <button class="clear" onclick="post('/api/clear')">Clear stop</button>
   </div>
 </header>
 
 <main>
-  <div class="stage">
-    <canvas id="brain"></canvas>
-    <div class="caption"><b id="c_n">–</b> of 166,700 neurons at their measured positions. Drag to rotate.</div>
-    <div class="eye left"><canvas id="eyeL" width="16" height="24"></canvas><div class="tag">left eye<span id="eyeLv">–</span></div></div>
-    <div class="eye right"><canvas id="eyeR" width="16" height="24"></canvas><div class="tag">right eye<span id="eyeRv">–</span></div></div>
+  <div class="view">
+    <div class="stage">
+      <canvas id="brain"></canvas>
+      <div class="caption"><b id="c_n">–</b> <span class="long">of 166,700 neurons at their measured positions. Drag to rotate.</span><span class="short">of 166,700 neurons. Drag to rotate.</span></div>
+    </div>
+    <div class="eyes">
+      <div class="eye left"><canvas id="eyeL" width="16" height="24"></canvas><div class="tag">left eye<span id="eyeLv">–</span></div></div>
+      <div class="eye right"><canvas id="eyeR" width="16" height="24"></canvas><div class="tag">right eye<span id="eyeRv">–</span></div></div>
+    </div>
     <div class="decision">
       <div class="verb stop" id="verb">–</div>
       <div class="why" id="why">Waiting for the first tick.</div>
@@ -128,10 +168,23 @@
         <div><span>robot is doing</span><b id="t_cmd">–</b></div>
         <div><span>bumpers front / rear</span><b id="t_bump">–</b></div>
         <div><span>cliff front / rear</span><b id="t_cliff">–</b></div>
+        <div><span>who drives</span><b id="t_mode">–</b></div>
+        <div><span>manoeuvre</span><b id="t_state">–</b></div>
+        <div><span>escapes, last 8 s</span><b id="t_esc">–</b></div>
+        <div class="mob"><span>motors</span><b id="t_motors">–</b></div>
+        <div class="mob"><span>brain step</span><b id="t_step">–</b></div>
+        <div class="mob"><span>spikes per tick</span><b id="t_spk">–</b></div>
       </div>
     </section>
   </aside>
 </main>
+</div>
+
+<div class="bar">
+  <button class="estop" onclick="post('/api/estop')">Emergency stop</button>
+  <button class="clear" onclick="post('/api/clear')">Clear stop</button>
+  <a class="btn drive" href="/controls">Drive</a>
+  <div class="mode">driven by<b id="m_mode">–</b></div>
 </div>
 
 <script>
@@ -155,6 +208,7 @@ const brainC=$('brain');
 brainC.addEventListener('pointerdown',e=>{dragging={x:e.clientX,y:e.clientY};brainC.setPointerCapture(e.pointerId);});
 brainC.addEventListener('pointermove',e=>{if(!dragging)return;yaw+=(e.clientX-dragging.x)*0.006;pitch=Math.max(-1.2,Math.min(1.2,pitch+(e.clientY-dragging.y)*0.006));dragging={x:e.clientX,y:e.clientY};autoSpin=false;});
 brainC.addEventListener('pointerup',()=>dragging=null);
+brainC.addEventListener('pointercancel',()=>dragging=null);
 function drawBrain(){
   const dpr=window.devicePixelRatio||1, W=brainC.clientWidth, H=brainC.clientHeight;
   if(brainC.width!==W*dpr||brainC.height!==H*dpr){brainC.width=W*dpr;brainC.height=H*dpr;}
@@ -162,7 +216,8 @@ function drawBrain(){
   if(layout){
     if(autoSpin) yaw+=0.0025;
     const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
-    const n=layout.x.length, scale=Math.min(W*0.62,H*0.5)*0.96, cx=W/2, cyy=H/2-42;
+    const phone=W<=900;
+    const n=layout.x.length, scale=Math.min(W*0.62,H*0.5)*0.96, cx=W/2, cyy=H/2-(phone?6:42);
     // the long body axis (x) runs vertically on screen: brain up, nerve cord down
     const order=new Array(n); const depth=new Float32Array(n), px=new Float32Array(n), py=new Float32Array(n);
     for(let i=0;i<n;i++){
@@ -276,30 +331,38 @@ function drawEye(id, eye, mask, w, h, half){
 
 /* ================= poll ================= */
 function setDot(id,state){ $(id).className='dot '+state; }
+const STATE_WORD={cruise:'cruising',freeze:'freeze',reverse:'backing up',turn:'turning until clear',refractory:'settling'};
 async function poll(){
   let s; try{ s=await (await fetch('/api/state')).json(); }catch{ $('s_robot').textContent='dashboard offline'; setDot('d_robot','off'); return; }
   if(!s.ok){ $('why').textContent=s.note||'Waiting'; return; }
-  const b=s.brain, r=s.robot, d=s.decision;
+  const b=s.brain, r=s.robot, d=s.decision, manual=s.mode==='manual';
   $('s_robot').textContent=r.connected?(r.sim?'simulated':'online'):'offline'; setDot('d_robot',r.connected?(r.sim?'warn':'on'):'off');
   $('s_cam').textContent=s.camera.source==='none'?'off':(s.camera.has_frame?s.camera.source:s.camera.source+', no frames'); setDot('d_cam',s.camera.has_frame?'on':s.camera.source==='none'?'':'warn');
-  $('s_motors').textContent=s.policy.enable_motors?['enabled',s.policy.demo_forward?'forward':null,s.policy.allow_turns?'turns':null].filter(Boolean).join(', '):'dry run';
-  $('s_step').textContent=b.step_ms+' ms'; $('s_spk').textContent=b.fired_total.toLocaleString();
+  const motors=s.policy.enable_motors?['enabled',s.policy.demo_forward?'forward':null,s.policy.allow_turns?'turns':null].filter(Boolean).join(', '):'dry run';
+  $('s_motors').textContent=motors; $('t_motors').textContent=motors;
+  $('s_step').textContent=b.step_ms+' ms'; $('t_step').textContent=b.step_ms+' ms';
+  $('s_spk').textContent=b.fired_total.toLocaleString(); $('t_spk').textContent=b.fired_total.toLocaleString();
   const v=$('verb'); const kind=d.action==='STOP'?'stop':d.action==='FORWARD'?'go':'turn';
-  v.className='verb '+kind; v.innerHTML=d.action.replace('_',' ').toLowerCase()+(d.speed?`<small>${d.speed}</small>`:'');
+  v.className='verb '+kind; v.innerHTML=d.action.replace(/_/g,' ').toLowerCase()+(d.speed?`<small>${d.speed}</small>`:'');
   $('why').textContent=d.reason;
-  $('sent').innerHTML=s.policy.enable_motors?`sent to robot: <b>${s.sent.action.toLowerCase()}${s.sent.speed?' '+s.sent.speed:''}</b>`:`dry run: robot receives <b>stop</b> only`;
+  $('sent').innerHTML=manual?`manual: robot receives <b>${s.sent.action.toLowerCase().replace(/_/g,' ')}${s.sent.speed?' '+s.sent.speed:''}</b>`
+    :s.policy.enable_motors?`sent to robot: <b>${s.sent.action.toLowerCase().replace(/_/g,' ')}${s.sent.speed?' '+s.sent.speed:''}</b>`:`dry run: robot receives <b>stop</b> only`;
   $('t_dist').textContent=r.distance_cm>=900?'clear':r.distance_cm.toFixed(0)+' cm';
   $('t_obs').textContent=r.obstacle?'yes':'no'; $('t_obs').className=r.obstacle?'bad':'';
   $('t_estop').textContent=r.emergency_stop?'latched':'no'; $('t_estop').className=r.emergency_stop?'bad':'';
-  $('t_cmd').textContent=(r.command||'–').toLowerCase().replace('_',' ');
+  $('t_cmd').textContent=(r.command||'–').toLowerCase().replace(/_/g,' ');
   $('t_bump').textContent=(r.bump_front?'hit':'ok')+' / '+(r.bump_rear?'hit':'ok'); $('t_bump').className=(r.bump_front||r.bump_rear)?'bad':'';
   $('t_cliff').textContent=(r.cliff_front?'drop':'ok')+' / '+(r.cliff_rear?'drop':'ok'); $('t_cliff').className=(r.cliff_front||r.cliff_rear)?'bad':'';
+  $('t_mode').textContent=manual?'you, from /controls':'fly brain'; $('t_mode').className=manual?'manual':'';
+  $('m_mode').textContent=manual?'manual':'fly brain'; $('m_mode').className=manual?'manual':'';
+  $('t_state').textContent=STATE_WORD[b.state]||b.state||'–';
+  $('t_esc').textContent=(b.escapes_recent??0)+(b.escapes_total!=null?` (${b.escapes_total} total)`:'');
   updatePath(b);
   const rt=b.retina;
   drawEye('eyeL',s.camera.eye,s.camera.eye_mask,s.camera.eye_w,s.camera.eye_h,'L'); drawEye('eyeR',s.camera.eye,s.camera.eye_mask,s.camera.eye_w,s.camera.eye_h,'R');
   $('eyeLv').textContent=s.camera.has_frame?`object ${(rt.size.L*100).toFixed(0)}%`:'no frame';
   $('eyeRv').textContent=s.camera.has_frame?`object ${(rt.size.R*100).toFixed(0)}%`:'no frame';
-  hist.push({wc:b.watch_counts,steps:b.steps,esc:/escape/.test(d.reason)}); if(hist.length>HIST) hist.shift();
+  hist.push({wc:b.watch_counts,steps:b.steps,esc:/escape|-> back up|-> rotate/.test(d.reason)}); if(hist.length>HIST) hist.shift();
   drawRaster();
   lastFired=b.fired_local||[];
 }

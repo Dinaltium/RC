@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Drive the robot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --field:#0E1620; --panel:#15202B; --rule:#22303E; --ink:#E8EEF2; --muted:#7F93A6; --faint:#3D4E5F;
+    --L:#5FD3F0; --R:#F2B24B; --stop:#FF6B5C; --go:#7BE495; --turn:#F2B24B;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--field);color:var(--ink);font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       font-size:15px;line-height:1.35;font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
+  button,a.btn{font:inherit}
+  :focus-visible{outline:2px solid var(--L);outline-offset:2px}
+  .page{max-width:520px;margin:0 auto;padding:14px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:18px;min-height:100%}
+
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
+  header a{color:var(--muted);text-decoration:none;font-size:14px}
+  header a:hover{color:var(--ink)}
+
+  /* who drives */
+  .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:13px 10px;cursor:pointer;font-weight:500;font-size:16px;min-height:48px}
+  .seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:inset 0 -2px 0 var(--L)}
+  .seg button[aria-pressed="true"].manual{box-shadow:inset 0 -2px 0 var(--turn)}
+  .hint{color:var(--muted);font-size:13px;margin:8px 2px 0}
+
+  /* speed */
+  .speed{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;font-size:14px;color:var(--muted)}
+  .speed b{color:var(--ink);font-weight:500;font-size:17px;min-width:3ch;text-align:right}
+  input[type=range]{width:100%;accent-color:var(--L);height:32px;margin:0}
+
+  /* pad */
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:10px;aspect-ratio:1;max-height:56vh;
+       touch-action:none;user-select:none;-webkit-user-select:none}
+  .pad button{border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:10px;cursor:pointer;min-height:64px;
+              display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-weight:500;font-size:15px;
+              touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  .pad button svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .pad button small{font-weight:400;color:var(--muted);font-size:12px}
+  .pad button.held{background:var(--L);color:#06222b;border-color:var(--L)}
+  .pad button.held small{color:#06222b}
+  .pad button.rot.held{background:var(--turn);border-color:var(--turn)}
+  .pad .centre{border-style:dashed;background:transparent;cursor:default;color:var(--muted);font-size:13px;line-height:1.3;text-align:center;padding:6px}
+  .pad .centre b{color:var(--ink);font-weight:600;font-size:18px;display:block}
+  .pad .centre b.stop{color:var(--stop)} .pad .centre b.go{color:var(--go)} .pad .centre b.turn{color:var(--turn)}
+  .pad.off button:not(.centre){opacity:.35;pointer-events:none}
+  .pad.off .centre{border-color:var(--faint)}
+
+  /* live */
+  .live{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px;font-size:14px}
+  .live div span{display:block;color:var(--muted);font-size:12px}
+  .live div b{font-weight:500;font-size:17px}
+  .live b.bad{color:var(--stop)}
+  .note{color:var(--muted);font-size:13px;min-height:1.3em}
+  .note.bad{color:var(--stop)}
+
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto}
+  .actions button{border:1px solid var(--rule);background:transparent;color:var(--ink);padding:13px 14px;border-radius:8px;cursor:pointer;font-weight:500;min-height:48px}
+  .actions button.estop{border-color:var(--stop);color:var(--stop)}
+  .actions button.estop:active{background:var(--stop);color:#1a0906}
+  .actions button.clear:active{background:var(--panel)}
+  @media(prefers-reduced-motion:no-preference){.pad button{transition:background .08s,color .08s}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Drive the robot</h1>
+    <a href="/">Fly brain dashboard</a>
+  </header>
+
+  <div>
+    <div class="seg" role="group" aria-label="Who drives">
+      <button id="modeFly" aria-pressed="true" onclick="setMode('fly')">Fly brain</button>
+      <button id="modeManual" class="manual" aria-pressed="false" onclick="setMode('manual')">Manual</button>
+    </div>
+    <p class="hint" id="hint">The connectome drives. Switch to Manual to use the pad.</p>
+  </div>
+
+  <div class="speed">
+    <span>speed</span>
+    <input type="range" id="speed" min="120" max="255" step="5" value="200" aria-label="speed">
+    <b id="speedv">200</b>
+  </div>
+
+  <div class="pad off" id="pad">
+    <button class="rot" data-action="ROTATE_LEFT" aria-label="rotate left">
+      <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg><small>rotate</small></button>
+    <button data-action="FORWARD" aria-label="forward">
+      <svg viewBox="0 0 24 24"><path d="M12 20V4"/><path d="M5 11l7-7 7 7"/></svg><small>forward</small></button>
+    <button class="rot" data-action="ROTATE_RIGHT" aria-label="rotate right">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M20 4v5h-5"/></svg><small>rotate</small></button>
+    <button data-action="LEFT" aria-label="turn left">
+      <svg viewBox="0 0 24 24"><path d="M20 12H4"/><path d="M11 5l-7 7 7 7"/></svg><small>turn</small></button>
+    <div class="centre" id="centre"><b id="doing">–</b><span id="range">–</span></div>
+    <button data-action="RIGHT" aria-label="turn right">
+      <svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M13 5l7 7-7 7"/></svg><small>turn</small></button>
+    <div></div>
+    <button data-action="BACKWARD" aria-label="backward">
+      <svg viewBox="0 0 24 24"><path d="M12 4v16"/><path d="M5 13l7 7 7-7"/></svg><small>back</small></button>
+    <div></div>
+  </div>
+
+  <div class="live">
+    <div><span>range</span><b id="t_dist">–</b></div>
+    <div><span>obstacle</span><b id="t_obs">–</b></div>
+    <div><span>emergency stop</span><b id="t_estop">–</b></div>
+    <div><span>robot</span><b id="t_robot">–</b></div>
+    <div><span>bumpers</span><b id="t_bump">–</b></div>
+    <div><span>sent</span><b id="t_sent">–</b></div>
+  </div>
+  <p class="note" id="note"></p>
+
+  <div class="actions">
+    <button class="estop" onclick="post('/api/estop')">Emergency stop</button>
+    <button class="clear" onclick="post('/api/clear')">Clear stop</button>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let mode='fly', held=null, heldBtn=null, repeat=null;
+
+function post(p,body){ return fetch(p,{method:'POST',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined}); }
+function note(t,bad){ $('note').textContent=t||''; $('note').className='note'+(bad?' bad':''); }
+
+/* ---- mode ---- */
+function showMode(m){
+  mode=m;
+  $('modeFly').setAttribute('aria-pressed',m==='fly'); $('modeManual').setAttribute('aria-pressed',m==='manual');
+  $('pad').classList.toggle('off',m!=='manual');
+  $('hint').textContent=m==='manual'?'You drive. Hold a button to move; release to stop.':'The connectome drives. Switch to Manual to use the pad.';
+}
+async function setMode(m){
+  release();
+  try{ const r=await post('/api/mode',{mode:m}); if(!r.ok) throw 0; showMode(m); note(''); }
+  catch{ note('Could not change mode: is the bridge running?',true); }
+}
+
+/* ---- speed ---- */
+$('speed').addEventListener('input',e=>{ $('speedv').textContent=e.target.value; });
+
+/* ---- pad: hold to drive ---- */
+async function send(action){
+  const speed=action==='STOP'?0:+$('speed').value;
+  try{ const r=await post('/api/manual',{action,speed}); if(r.status===409){ note('Switch to Manual first.',true); release(); } }
+  catch{ note('Lost the bridge; robot stops itself in 1.5 s.',true); }
+}
+function press(btn){
+  if(mode!=='manual') return;
+  release(false);
+  held=btn.dataset.action; heldBtn=btn; btn.classList.add('held');
+  send(held); repeat=setInterval(()=>send(held),250);   // bridge drops a press after 0.7 s
+}
+function release(sendStop=true){
+  if(repeat){ clearInterval(repeat); repeat=null; }
+  if(heldBtn){ heldBtn.classList.remove('held'); heldBtn=null; }
+  if(held){ held=null; if(sendStop) send('STOP'); }
+}
+for(const b of document.querySelectorAll('#pad button[data-action]')){
+  b.addEventListener('pointerdown',e=>{ e.preventDefault(); b.setPointerCapture(e.pointerId); press(b); });
+  for(const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev,()=>release());
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+}
+$('pad').addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) release(); });
+addEventListener('blur',()=>release());
+addEventListener('pagehide',()=>release());
+
+/* ---- poll ---- */
+async function poll(){
+  let s; try{ s=await (await fetch('/api/state')).json(); }catch{ $('t_robot').textContent='bridge offline'; $('t_robot').className='bad'; return; }
+  if(s.mode&&s.mode!==mode&&!held) showMode(s.mode);
+  if(!s.ok) return;
+  const r=s.robot, sent=s.sent||{};
+  $('t_dist').textContent=r.distance_cm>=900?'clear':r.distance_cm.toFixed(0)+' cm';
+  $('range').textContent=r.distance_cm>=900?'nothing ahead':r.distance_cm.toFixed(0)+' cm ahead';
+  $('t_obs').textContent=r.obstacle?'yes':'no'; $('t_obs').className=r.obstacle?'bad':'';
+  $('t_estop').textContent=r.emergency_stop?'latched':'no'; $('t_estop').className=r.emergency_stop?'bad':'';
+  $('t_robot').textContent=r.connected?(r.sim?'simulated':'online'):'offline'; $('t_robot').className=r.connected?'':'bad';
+  $('t_bump').textContent=(r.bump_front?'front':'')+((r.bump_front&&r.bump_rear)?' + ':'')+(r.bump_rear?'rear':'')||'clear'; $('t_bump').className=(r.bump_front||r.bump_rear)?'bad':'';
+  const sa=(sent.action||'STOP').toLowerCase().replace(/_/g,' ');
+  $('t_sent').textContent=sa+(sent.speed?' '+sent.speed:'');
+  const cmd=(r.command||'STOP').toLowerCase().replace(/_/g,' ');
+  const d=$('doing'); d.textContent=cmd; d.className=cmd==='stop'?'stop':cmd==='forward'?'go':'turn';
+  if(mode==='fly'&&s.decision) note('Fly brain: '+s.decision.reason);
+  else if(r.emergency_stop) note('Emergency stop is latched. Clear it to drive.',true);
+  else if(r.obstacle) note('Obstacle ahead: the robot refuses forward until it is past 35 cm.');
+  else if(!held&&$('note').textContent.startsWith('Fly brain')) note('');
+}
+fetch('/api/mode').then(r=>r.json()).then(j=>showMode(j.mode)).catch(()=>{});
+setInterval(poll,200); poll();
+</script>
+</body>
+</html>

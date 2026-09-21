@@ -7,6 +7,7 @@
 
 #include "espnow_control.h"
 #include "config.h"
+#ifdef ENABLE_ESPNOW_FALLBACK
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
@@ -26,9 +27,8 @@ static void onDataSent(const uint8_t *mac, esp_now_send_status_t status) {
 }
 
 void espnowCamInit() {
-    // Set Wi-Fi to station mode on the correct channel
-    WiFi.mode(WIFI_STA);
-    esp_wifi_set_channel(WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    // The sketch has already joined the robot's AP in STA mode, which puts
+    // the radio on the AP's channel; ESP-NOW rides on that same channel.
 
     if (esp_now_init() != ESP_OK) {
         Serial.println(F("[ESPNOW] ERROR: Init failed"));
@@ -67,3 +67,4 @@ bool espnowCamSendCommand(uint8_t command, uint8_t speed) {
 bool espnowCamSendHeartbeat() {
     return espnowCamSendCommand(CMD_HEARTBEAT, 0);
 }
+#endif // ENABLE_ESPNOW_FALLBACK

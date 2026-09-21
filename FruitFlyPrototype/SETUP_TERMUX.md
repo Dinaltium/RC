@@ -1,5 +1,9 @@
 # Running the FruitFly host on the phone (Termux + Debian)
 
+> Handing the phone to someone new? `PHONE_GUIDE.md` is the same procedure
+> written out step by step with every command ready to copy. This file is
+> the short version for people who already know Termux.
+
 Goal: the phone is camera **and** brain. It joins the robot's Wi-Fi AP,
 runs `fruitfly_bridge.py` inside a Debian proot, watches its own camera,
 and sends intents to the ESP32 at `192.168.4.1`. The laptop is no longer
@@ -12,7 +16,9 @@ OpenCV, no PyTorch, CPU brain via numba, and every input reachable over
 ## 0. Requirements
 
 * Android phone, arm64, ≥ 4 GB RAM (the brain needs ~600 MB resident).
-* Termux from **F-Droid** (the Play Store build is abandoned).
+* Termux from the **GitHub releases** page
+  (https://github.com/termux/termux-app/releases) or **F-Droid** — both are
+  fine. Not the Play Store build, which is abandoned.
 * ~1.5 GB free storage (Debian + Python packages + 260 MB brain files).
 * Internet for the install steps only — once on the robot's AP the phone
   has no internet, so download everything first.
@@ -94,7 +100,11 @@ Either:
 ```
 
 The dashboard's **E-STOP** button and the robot's own web UI
-(`http://192.168.4.1/`) both still work from the phone.
+(`http://192.168.4.1/`) both still work from the phone. To drive by hand,
+open `http://127.0.0.1:8642/controls`, switch to *Manual* and hold the
+pad; switch back to *Fly brain* to let the connectome drive. If the robot
+carries the ESP32-CAM, `--camera http://192.168.4.20/stream` replaces the
+phone camera.
 
 ## 7. Known constraints
 

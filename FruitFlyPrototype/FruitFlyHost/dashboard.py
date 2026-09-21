@@ -12,11 +12,17 @@ Routes
     POST /camera/push    raw JPEG body (used by the /camera page)
     POST /api/estop      ask the bridge to send EMERGENCY_STOP
     POST /api/clear      ask the bridge to send CLEAR_EMERGENCY
+    GET  /controls       phone page: fly / manual switch and a drive pad
+    GET  /api/mode       {"mode": "fly"|"manual"}
+    POST /api/mode       {"mode": "fly"|"manual"}
+    POST /api/manual     {"action": "FORWARD", "speed": 180}; repeat while held,
+                         the bridge sends STOP when a press goes stale
 """
 from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -87,10 +93,16 @@ class NeuronLayout:
 
 
 class Dashboard:
-    def __init__(self, port: int, layout: NeuronLayout | None, push_camera=None):
+    MANUAL_ACTIONS = {"STOP", "FORWARD", "BACKWARD", "LEFT", "RIGHT", "ROTATE_LEFT", "ROTATE_RIGHT"}
+
+    def __init__(self, port: int, layout: NeuronLayout | None, push_camera=None,
+                 mode: str = "fly", manual_stale: float = 0.7):
         self.port = port
         self.layout = layout
         self.push_camera = push_camera
+        self.mode = mode                      # "fly" | "manual"
+        self.manual_stale = manual_stale
+        self._manual = ("STOP", 0, 0.0)       # action, speed, monotonic time of the press
         self._lock = threading.Lock()
         self._state: dict = {"ok": False, "note": "waiting for first tick"}
         self._frame: bytes = b""
@@ -110,6 +122,22 @@ class Dashboard:
             self._state = state
             if frame_jpeg:
                 self._frame = frame_jpeg
+
+    def set_mode(self, mode: str) -> None:
+        with self._lock:
+            self.mode = mode
+            self._manual = ("STOP", 0, 0.0)   # switching modes never carries a press over
+
+    def set_manual(self, action: str, speed: int) -> None:
+        with self._lock:
+            self._manual = (action, max(0, min(255, int(speed))), time.monotonic())
+
+    def manual_command(self) -> tuple[str, int]:
+        with self._lock:
+            action, speed, when = self._manual
+        if action == "STOP" or time.monotonic() - when > self.manual_stale:
+            return "STOP", 0
+        return action, speed
 
     def pop_requests(self) -> list[str]:
         with self._lock:
@@ -142,6 +170,10 @@ class Dashboard:
                     self._send(200, (STATIC / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
                 elif path == "/camera":
                     self._send(200, (STATIC / "camera.html").read_bytes(), "text/html; charset=utf-8")
+                elif path == "/controls":
+                    self._send(200, (STATIC / "controls.html").read_bytes(), "text/html; charset=utf-8")
+                elif path == "/api/mode":
+                    self._json({"mode": dash.mode})
                 elif path == "/api/state":
                     with dash._lock:
                         state = dash._state
@@ -169,6 +201,29 @@ class Dashboard:
                         self._json({"ok": True})
                     else:
                         self._json({"ok": False, "error": "bad jpeg"}, 400)
+                elif path == "/api/mode":
+                    try:
+                        mode = json.loads(body or b"{}").get("mode")
+                    except json.JSONDecodeError:
+                        mode = None
+                    if mode not in ("fly", "manual"):
+                        self._json({"ok": False, "error": "mode must be fly or manual"}, 400)
+                    else:
+                        dash.set_mode(mode)
+                        self._json({"ok": True, "mode": mode})
+                elif path == "/api/manual":
+                    try:
+                        req = json.loads(body or b"{}")
+                    except json.JSONDecodeError:
+                        req = {}
+                    action = str(req.get("action", "")).upper()
+                    if action not in dash.MANUAL_ACTIONS:
+                        self._json({"ok": False, "error": "bad action"}, 400)
+                    elif dash.mode != "manual":
+                        self._json({"ok": False, "error": "switch to manual first"}, 409)
+                    else:
+                        dash.set_manual(action, int(req.get("speed", 0)))
+                        self._json({"ok": True})
                 elif path in ("/api/estop", "/api/clear"):
                     with dash._lock:
                         dash.requests.append("EMERGENCY_STOP" if path == "/api/estop" else "CLEAR_EMERGENCY")

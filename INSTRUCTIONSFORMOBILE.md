@@ -15,7 +15,8 @@ robot is powered, which camera app they prefer).
   Do not modify or try to build it here.** It keeps final authority over
   obstacle stop, e-stop and motor GPIO; the phone only proposes intents.
 - Docs to read: `FruitFlyPrototype/SETUP_TERMUX.md` (phone setup),
-  `FruitFlyPrototype/FruitFlyHost/README.md` (flags, camera options),
+  `FruitFlyPrototype/FruitFlyHost/README.md` (flags, camera options,
+  `/controls`, avoidance behaviour),
   `FruitFlyPrototype/FruitFlyHost/FLYBRAIN_NOTES.md` (what the model is).
 
 ## Hard constraints
@@ -30,6 +31,10 @@ robot is powered, which camera app they prefer).
 - Everything must work with **no internet** once the phone joins the
   robot's Wi-Fi AP (`RobotPrototype`, password in `RobotPrototype/config.h`).
   Download everything before that step.
+- `FruitFlyPrototype/PHONE_GUIDE.md` is the human-readable, copy-paste
+  version of these same steps for the person holding the phone. Keep the
+  two consistent: if you find a step here that contradicts the guide, tell
+  the user which one is wrong rather than silently picking one.
 
 ## Step 1 — environment
 
@@ -96,6 +101,12 @@ background tabs).
 Alternative: the **IP Webcam** app. Start it, then
 `--camera http://127.0.0.1:8080/video`. Survives screen-off.
 
+Option C: the robot carries an **ESP32-CAM** (sketch `FruitFlyPrototype/ESP32CAM/`,
+already flashed if the user says so). Once the phone is on the robot's AP
+(Step 5) use `--camera http://192.168.4.20/stream`; check
+`curl -s -m 3 http://192.168.4.20/` returns JSON with `"camera": true`
+first. Then the phone camera is not needed at all.
+
 Verify: `/api/state` → `"camera": {"has_frame": true ...}` and the two eye
 tiles on the dashboard show the picture.
 
@@ -117,16 +128,32 @@ tiles on the dashboard show the picture.
 Verify on the dashboard: robot **online**, range updating, decision verb
 changing when a hand approaches the phone camera, "sent to robot: stop".
 
+5. Manual test before the fly drives (this is allowed without
+   `--enable-motors`, but only with the user's go-ahead and ideally wheels
+   lifted): open `http://127.0.0.1:8642/controls`, switch to **Manual**,
+   hold *forward* for a second — the robot's own `/api/status` should show
+   `"command":"FORWARD"` and speed ~200 — then *rotate left*: the chassis
+   must turn left (the firmware's `SWAP_LEFT_RIGHT` handles the mirrored
+   wiring; if it still turns the wrong way, report it, do not patch).
+   Release: the robot stops within ~0.7 s. Switch back to **Fly brain**.
+
 ## Step 6 — motors (only when the user says so)
 
 ```bash
 ./run.sh --camera push --enable-motors --demo-forward --allow-turns
 ```
 
-Behaviour to expect: forward at ~48/255 when clear; a looming object →
-stop, then rotate away for ~0.8 s at 5 Hz ticks. The ESP32 still stops on
-its own at ≤ 30 cm. The dashboard's **Emergency stop** button works from
-the phone; **Clear stop** releases it.
+Behaviour to expect: forward at ~150–200/255 when clear (never below
+120, the motor stall floor); a looming object → brief freeze, then rotate
+away **until the range reads ≥ 45 cm** (0.6–4 s); the range sensor at
+≤ 30 cm or a front bumper hit → freeze, back up ~0.7 s, then rotate until
+clear; repeated escapes keep the same turning direction, and the third one
+within 8 s backs up longer and turns about twice as far. The dashboard's
+Robot section shows the state (`cruise` / `freeze` / `reverse` / `turn` /
+`refractory`). The ESP32 still stops on its own at ≤ 30 cm. The
+dashboard's **Emergency stop** button works from the phone; **Clear stop**
+releases it. `--max-speed` / `--min-speed` / `--clear-cm` adjust this only
+if the user asks.
 
 ## Troubleshooting
 
@@ -137,7 +164,9 @@ the phone; **Clear stop** releases it.
 | `/api/state` 404 or refused | bridge not running or crashed; read its console output |
 | `camera: push, no frames` | camera page not streaming, or Chrome in background |
 | `robot offline` on dashboard | phone not on `RobotPrototype` Wi-Fi, or robot unpowered |
-| decision always `stop`, reason `range NN cm` | ultrasonic sees something < 30 cm; expected |
+| decision always `stop`, reason `range NN cm` | ultrasonic sees something < 30 cm; expected (with motors on it backs up and turns instead) |
+| `/controls` pad does nothing, `409` in the browser console | mode is still *Fly brain*; tap *Manual* first |
+| `curl http://192.168.4.20/` times out | ESP32-CAM not powered or not on the AP; fall back to `--camera push` |
 | `connection error ... sending no motion` in log | Wi-Fi dropped; the ESP32 halts itself after 1.5 s without heartbeat |
 
 ## Report back

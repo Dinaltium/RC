@@ -17,4 +17,4 @@ if ($Sim) { $bridgeArgs += "--sim-robot" }
 if ($EnableMotors) { $bridgeArgs += "--enable-motors" }
 if ($DemoForward) { $bridgeArgs += "--demo-forward" }
 if ($AllowTurns) { $bridgeArgs += "--allow-turns" }
-& $py @args
+& $py @bridgeArgs

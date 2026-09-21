@@ -2,8 +2,17 @@
 
 A modular, safety-first robot controller built for ESP32 using pure Arduino C++ (Arduino IDE 2.x & Arduino CLI compatible).
 
-> **FruitFly fork.** This copy is driven by a host-side fruit-fly connectome (`FruitFlyHost/`), uses two motors, an LD2420 presence radar, and has the **ESP32-CAM / ESP-NOW fallback disabled** (`ENABLE_ESPNOW` in `config.h`); the phone is the camera. See `FRUITFLY_SETUP.md`, `WIRING.md` (all sensor connections), `FruitFlyHost/README.md` and `SETUP_TERMUX.md`. The sections below describe the shared base firmware.
-
+> **FruitFly fork.** This copy is driven by a host-side fruit-fly connectome (`FruitFlyHost/`) and uses two motors. What differs from the base firmware described below:
+>
+> * **Host in charge, firmware has the veto.** The host (laptop, or the phone via Termux + Debian — see `PHONE_GUIDE.md` for the copy-paste setup a friend can follow, `SETUP_TERMUX.md` for the short version) runs the brain and posts intents to `/api/command`; the ESP32 still enforces range stop, bumpers, cliffs, e-stop and heartbeat timeout.
+> * **Two ways to drive.** The host dashboard (`http://<host>:8642/`) shows the brain; `http://<host>:8642/controls` is a phone page with a *Fly brain / Manual* switch and a hold-to-drive pad. Manual mode works without `--enable-motors`.
+> * **Speeds.** Host defaults are now `--max-speed 200` and `--min-speed 120` (PWM out of 255); the brushed BO motors stall below ~110, so the host never sends less than the floor.
+> * **Avoidance is a saccade state machine** (`FruitFlyHost/fly_controller.py`): trigger (DNp01 looming, range sensor or front bumper) → freeze → back up (range/bump triggers) → rotate **until the way is clear** (range ≥ 45 cm and no loom, with min/max duration) → refractory. Escapes close together keep the same turning direction so the robot does not ping-pong; the third one inside 8 s backs up longer and turns roughly twice as far.
+> * **`SWAP_LEFT_RIGHT = true`** in `RobotPrototype/config.h`: the chassis drivers were wired mirrored, so LEFT turned right; the firmware swaps the pin tables. Set false if re-wired.
+> * **Sensors:** HC-SR04 front range on 26/27 (LD2420 and VL53L0X selectable), endstop bumpers on 34/35 (`ENABLE_BUMP`), downward VL53L0X cliff pair (`ENABLE_TOF_CLIFF`), and an **SSD1306 OLED** status display on the I²C bus (`ENABLE_OLED`, on by default, auto-disables when absent). All wiring in `WIRING.md`.
+> * **Camera.** The phone is the default camera (browser push page or IP Webcam). The `ESP32CAM/` sketch (replaces `ESP32CAMFallback/`) turns an AI Thinker ESP32-CAM into a Wi-Fi camera on the robot's AP at `192.168.4.20/stream`; use `--camera http://192.168.4.20/stream`. Its ESP-NOW fallback role is optional (`ENABLE_ESPNOW_FALLBACK` + `ENABLE_ESPNOW`), off by default.
+>
+> See `FRUITFLY_SETUP.md`, `WIRING.md`, `FruitFlyHost/README.md`, `SETUP_TERMUX.md` and `PHONE_GUIDE.md`. The sections below describe the shared base firmware.
 ---
 
 ## 1. System Architecture
@@ -297,12 +306,15 @@ c:/Projects/RC/
 │   ├── wifi_control.h / .cpp     # Wi-Fi Soft AP (SSID: RobotPrototype, Ch: 1)
 │   ├── espnow_control.h / .cpp   # ESP-NOW receiver with peer validation
 │   ├── bluetooth_control.h / .cpp# Optional Bluetooth SPP fallback
-│   └── web_server.h / .cpp       # WebServer + embedded HTML5 Mobile UI
+│   ├── web_server.h / .cpp       # WebServer + embedded HTML5 Mobile UI
+│   ├── bump.h / .cpp             # Endstop bumpers (ENABLE_BUMP)
+│   ├── tof.h / .cpp, cliff.h / .cpp # VL53L0X bring-up and latched cliff detection
+│   └── oled.h / .cpp             # SSD1306 status display (ENABLE_OLED)
 │
-├── ESP32CAMFallback/             # ESP32-CAM fallback sketch
-│   ├── ESP32CAMFallback.ino      # Heartbeat beacon & serial command bridge
-│   ├── config.h                  # Channel & main ESP32 MAC configuration
-│   ├── espnow_control.h / .cpp   # ESP-NOW transmitter logic
+├── ESP32CAM/                     # ESP32-CAM as a Wi-Fi camera (FruitFly fork)
+│   ├── ESP32CAM.ino              # joins the robot AP, serves /stream /capture /
+│   ├── config.h                  # Wi-Fi, fixed IP, frame size, optional ESP-NOW fallback
+│   ├── espnow_control.h / .cpp   # ESP-NOW transmitter (ENABLE_ESPNOW_FALLBACK only)
 │
 ├── INSTRUCTION.md                # Base requirements specification
 └── README.md                     # This documentation
@@ -320,7 +332,10 @@ All libraries are standard and included with the official **ESP32 Arduino Core b
 * `BluetoothSerial` (used only if `#define ENABLE_BLUETOOTH` is uncommented)
 * `esp_camera` (included with ESP32 board package for ESP32-CAM)
 
-No third-party libraries or PlatformIO installations are required.
+FruitFly fork additions (main controller only): **VL53L0X by Pololu**,
+**Adafruit SSD1306**, **Adafruit GFX Library** —
+`arduino-cli lib install VL53L0X "Adafruit SSD1306" "Adafruit GFX Library"`.
+No PlatformIO installation is required.
 
 ### A. Arduino IDE 2.x
 1. Open **Preferences** (`Ctrl + ,`) and add the ESP32 board manager URL:
@@ -333,7 +348,7 @@ No third-party libraries or PlatformIO installations are required.
    * Select your board (e.g. `ESP32 Dev Module`) and target COM port.
    * Click **Upload**.
 4. For ESP32-CAM:
-   * Open `ESP32CAMFallback/ESP32CAMFallback.ino`
+   * Open `ESP32CAM/ESP32CAM.ino`
    * Select your board (e.g. `AI Thinker ESP32-CAM` or your physical module) and COM port.
    * Click **Upload**.
 
@@ -350,10 +365,10 @@ arduino-cli compile --fqbn esp32:esp32:esp32 RobotPrototype
 arduino-cli upload -p COM3 --fqbn esp32:esp32:esp32 RobotPrototype
 
 # Compile ESP32-CAM
-arduino-cli compile --fqbn esp32:esp32:esp32cam ESP32CAMFallback
+arduino-cli compile --fqbn esp32:esp32:esp32cam ESP32CAM
 
-# Upload to ESP32-CAM (replace COM4 with your port)
-arduino-cli upload -p COM4 --fqbn esp32:esp32:esp32cam ESP32CAMFallback
+# Upload to ESP32-CAM (replace COM4 with your port; GPIO 0 to GND while flashing)
+arduino-cli upload -p COM4 --fqbn esp32:esp32:esp32cam ESP32CAM
 ```
 
 ---
@@ -365,9 +380,13 @@ arduino-cli upload -p COM4 --fqbn esp32:esp32:esp32cam ESP32CAMFallback
    ```text
    [BOOT] MAC Address: 24:0A:C4:XX:XX:XX
    ```
-3. Open `ESP32CAMFallback/config.h` and update `MAIN_ESP32_MAC` with this address.
-4. Upload `ESP32CAMFallback` to the ESP32-CAM. Note its MAC address from the Serial Monitor.
+3. Open `ESP32CAM/config.h` and update `MAIN_ESP32_MAC` with this address.
+4. Upload `ESP32CAM` to the ESP32-CAM. Note its MAC address from the Serial Monitor.
 5. In `RobotPrototype/config.h`, update `ESP32_CAM_MAC` with the CAM's address for unicast communication (defaults to broadcast `0xFF` until configured).
+
+In the FruitFly fork this pairing is optional: ESP-NOW is compiled out on
+both sides (`ENABLE_ESPNOW` / `ENABLE_ESPNOW_FALLBACK`) and the ESP32-CAM
+works purely as a Wi-Fi camera without any of the steps above.
 
 ---
 
@@ -376,7 +395,7 @@ arduino-cli upload -p COM4 --fqbn esp32:esp32:esp32cam ESP32CAMFallback
 ### A. Software & Build Verification (Completed)
 - [x] Arduino IDE project structure compatibility (pure standard `.ino`, `.h`, `.cpp`)
 - [x] Arduino CLI compilation — Main Controller (`RobotPrototype`)
-- [x] Arduino CLI compilation — Fallback Controller (`ESP32CAMFallback`)
+- [x] Arduino CLI compilation — ESP32-CAM camera sketch (`ESP32CAM`)
 - [x] Decoupled ESP-NOW receive callback (lightweight ISR copy to queue)
 - [x] Unconditional normal STOP acceptance from any source
 - [x] Latched Emergency Stop with explicit Clear Emergency command

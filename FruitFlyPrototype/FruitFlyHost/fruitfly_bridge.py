@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from camera import PushCamera, open_camera            # noqa: E402
 from dashboard import Dashboard, NeuronLayout         # noqa: E402
-from fly_controller import WATCH_TYPES, FruitFlyController, Policy  # noqa: E402
+from fly_controller import WATCH_TYPES, Decision, FruitFlyController, Policy  # noqa: E402
 from robot_client import ConnectionErrors, RobotClient, RobotStatus, SimulatedRobot  # noqa: E402
 
 
@@ -62,7 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--enable-motors", action="store_true")
     p.add_argument("--demo-forward", action="store_true")
     p.add_argument("--allow-turns", action="store_true")
-    p.add_argument("--max-speed", type=int, default=80)
+    p.add_argument("--max-speed", type=int, default=Policy.max_speed, help="PWM 0..255 for cruising and turning")
+    p.add_argument("--min-speed", type=int, default=Policy.min_speed, help="never send a slower PWM than this (motor stall floor)")
+    p.add_argument("--clear-cm", type=float, default=Policy.clear_cm, help="a turn may end once the range reads this far")
+    p.add_argument("--mode", choices=("fly", "manual"), default="fly", help="start in fly or manual (/controls page) mode")
     p.add_argument("--escape-threshold", type=float, default=Policy.escape_threshold)
     p.add_argument("--steer-threshold", type=float, default=Policy.steer_threshold)
     p.add_argument("--quiet", action="store_true", help="no per-tick console line")
@@ -75,33 +78,39 @@ def main() -> int:
         sys.exit("--hz must be between 0 and 25")
     if args.max_speed < 0 or args.max_speed > 255:
         sys.exit("--max-speed must be 0..255")
+    if args.min_speed < 0 or args.min_speed > args.max_speed:
+        sys.exit("--min-speed must be 0..max-speed")
 
     from flybrain import FlyBrain   # slow import (numba); after arg errors
 
     robot = SimulatedRobot(fixed_cm=args.sim_distance) if args.sim_robot else RobotClient(args.robot_url)
     camera = open_camera(args.camera)
     policy = Policy(enable_motors=args.enable_motors, demo_forward=args.demo_forward,
-                    allow_turns=args.allow_turns, max_speed=args.max_speed,
+                    allow_turns=args.allow_turns, max_speed=args.max_speed, min_speed=args.min_speed,
+                    clear_cm=args.clear_cm,
                     escape_threshold=args.escape_threshold, steer_threshold=args.steer_threshold)
 
     print("loading MaleCNS connectome ...", flush=True)
     brain = FlyBrain(device=args.device, seed=args.seed, sensory_input=False)
-    controller = FruitFlyController(brain, policy, steps_per_tick=args.steps_per_tick)
+    controller = FruitFlyController(brain, policy, steps_per_tick=args.steps_per_tick, hz=args.hz)
 
     dashboard = None
     if not args.no_dashboard:
         layout = NeuronLayout(brain, WATCH_TYPES)
         dashboard = Dashboard(args.dashboard_port, layout,
-                              push_camera=camera if isinstance(camera, PushCamera) else None)
+                              push_camera=camera if isinstance(camera, PushCamera) else None,
+                              mode=args.mode)
         dashboard.start()
         ip = local_ip()
         print(f"dashboard    http://{ip}:{args.dashboard_port}/")
+        print(f"controls     http://{ip}:{args.dashboard_port}/controls")
         if isinstance(camera, PushCamera):
             print(f"phone camera http://{ip}:{args.dashboard_port}/camera")
 
     print(f"brain device={brain.device}  robot={'SIM' if args.sim_robot else args.robot_url}  camera={camera.name}")
     print(f"motors={'ENABLED' if args.enable_motors else 'DRY-RUN'} demo_forward={args.demo_forward} "
-          f"turns={args.allow_turns} hz={args.hz:g} steps/tick={args.steps_per_tick}", flush=True)
+          f"turns={args.allow_turns} speed={args.min_speed}..{args.max_speed} hz={args.hz:g} "
+          f"steps/tick={args.steps_per_tick} mode={args.mode}", flush=True)
     print("warming up numba ...", flush=True)
     controller.tick(None, RobotStatus())
 
@@ -128,7 +137,16 @@ def main() -> int:
                     robot.command(req, 0)
                     print(f"dashboard -> {req}", flush=True)
 
-                if args.enable_motors:
+                mode = dashboard.mode if dashboard else "fly"
+                if mode == "manual":
+                    # /controls page drives. A press is repeated by the page
+                    # while held; anything older than manual_stale is a
+                    # dropped connection and becomes STOP.
+                    m_action, m_speed = dashboard.manual_command()
+                    robot.command(m_action, m_speed)
+                    sent = (m_action, m_speed)
+                    decision = Decision(m_action, m_speed, "manual control from /controls")
+                elif args.enable_motors:
                     robot.command(decision.action, decision.speed)
                     sent = (decision.action, decision.speed)
                 else:
@@ -175,6 +193,7 @@ def main() -> int:
                                             if gray is not None and controller.retina.mask is not None else None),
                                "eye_w": 32, "eye_h": 24},
                     "policy": policy.__dict__,
+                    "mode": dashboard.mode,
                     "decision": (decision.__dict__ if decision else {"action": "STOP", "speed": 0, "reason": "robot offline"}),
                     "sent": {"action": sent[0], "speed": sent[1]},
                     "brain": snap,

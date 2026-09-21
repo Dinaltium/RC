@@ -26,8 +26,8 @@ robot range  ─┘                            │
 | `robot_client.py` | ESP32 HTTP client + `SimulatedRobot` for bench-free runs |
 | `camera.py` | phone camera input: MJPEG URL, snapshot URL, or browser push |
 | `vision.py` | retina: frame + range → population-coded drive on the fly's visual projection neurons |
-| `fly_controller.py` | brain stepping, readout EMAs, decoder policy |
-| `dashboard.py` + `static/` | live dashboard (`/`) and phone camera page (`/camera`) |
+| `fly_controller.py` | brain stepping, readout EMAs, saccade/avoidance state machine |
+| `dashboard.py` + `static/` | live dashboard (`/`), phone camera page (`/camera`), manual drive page (`/controls`) |
 | `calibrate.py` | measures readout rates per stimulus; use it to tune thresholds |
 | `FLYBRAIN_NOTES.md` | what the connectome model is, findings, improvement roadmap |
 | `run.ps1` / `run.sh` | launchers (Windows / Linux+Termux) |
@@ -54,10 +54,9 @@ python FruitFlyHost\fruitfly_bridge.py --camera push
 python FruitFlyHost\fruitfly_bridge.py --camera push --enable-motors --demo-forward --allow-turns
 ```
 
-## The phone is the camera
+## Camera
 
-The ESP32-CAM is disabled (`ENABLE_ESPNOW` commented out in
-`RobotPrototype/config.h`). Pick one of:
+Pick one of:
 
 **A. Browser push (no app).** Start the bridge with `--camera push`, open
 `http://<host-ip>:8642/camera` on the phone, tap *Start streaming*. The page
@@ -73,8 +72,36 @@ plain-HTTP laptop host enable
 `--camera http://<phone-ip>:8080/shot.jpg` (snapshot polling). On the phone
 itself this becomes `http://127.0.0.1:8080/video`.
 
+**C. ESP32-CAM on the robot.** Flash `../ESP32CAM/` onto an AI Thinker
+ESP32-CAM (see `../WIRING.md` §6). It joins the robot's AP at
+`192.168.4.20` and streams MJPEG; run with
+`--camera http://192.168.4.20/stream`. No phone camera needed, and the
+phone can stay in your pocket.
+
 The phone and the host must be on the same network as the robot (join the
 robot's AP; it allows several clients).
+
+## Driving by hand (`/controls`)
+
+`http://<host>:8642/controls` is a phone page with a *Fly brain / Manual*
+switch, a speed slider (120–255) and a hold-to-drive pad (forward, back,
+arc left/right, rotate left/right). In manual mode the bridge sends what
+you hold and STOPs the moment you let go or the page loses contact; the
+brain keeps running so the dashboard stays live. Manual mode works **without**
+`--enable-motors` — pressing the pad is the explicit consent — but the
+ESP32's own range, bumper, cliff and e-stop rules still apply. Switch back
+to *Fly brain* to hand control to the connectome.
+
+API behind the page:
+
+| Route | Body / result |
+|---|---|
+| `GET /api/mode` | `{"mode": "fly" \| "manual"}` |
+| `POST /api/mode` | `{"mode": "fly" \| "manual"}`; switching always clears any held press |
+| `POST /api/manual` | `{"action": "FORWARD" \| "BACKWARD" \| "LEFT" \| "RIGHT" \| "ROTATE_LEFT" \| "ROTATE_RIGHT" \| "STOP", "speed": 0..255}`; repeat while held, a press older than 0.7 s becomes STOP; 409 unless mode is manual |
+| `POST /api/estop`, `POST /api/clear` | emergency stop / clear, forwarded to the ESP32 |
+
+`--mode manual` starts the bridge in manual mode.
 
 ## Dashboard (`http://<host>:8642/`)
 
@@ -90,6 +117,9 @@ robot's AP; it allows several clients).
 * **Spikes, last 20 s** — a raster of the watched populations per eye; red
   ticks on the top edge mark escape decisions.
 * **Emergency stop / Clear stop** — sent straight to the ESP32.
+* **Drive** — link to `/controls`. The Robot section also shows the current
+  mode and the avoidance state (`cruise`, `freeze`, `reverse`, `turn`,
+  `refractory`) with how many escapes happened in the last 8 s.
 
 Fonts load from Google Fonts when online and fall back to the system face
 on the robot's AP; nothing else leaves the host.
@@ -103,8 +133,60 @@ with `--device cpu`; the CPU path is the one the phone uses anyway.
 |---|---|
 | (none) | dry-run: brain runs, dashboard live, robot only receives STOP + heartbeat |
 | `--enable-motors` | decoder output is sent; still STOP unless the next two are set |
-| `--demo-forward` | FORWARD allowed when nothing looms (≤ `--max-speed`, default 80/255) |
+| `--demo-forward` | FORWARD (and BACKWARD during an avoid) allowed when nothing looms |
 | `--allow-turns` | ROTATE away after an escape; LEFT/RIGHT from DNa02 asymmetry |
+| `--max-speed N` | PWM for cruising and turning, default **200**/255 |
+| `--min-speed N` | never send a lower PWM than this, default **120** (brushed BO motors stall below ~110) |
+| `--clear-cm N` | a turn may end once the range reads at least this far, default **45** |
+| `--mode fly\|manual` | start in fly or manual (`/controls`) mode, default fly |
+
+Independent of these, the ESP32 stops at ≤ 30 cm (or LD2420 presence),
+latches its own e-stop, and halts if heartbeats stop for 1.5 s.
+
+## How it avoids things
+
+The old decoder turned for a fixed 0.8 s and re-armed immediately, which on
+a wall produced forward → turn → forward → turn for ever. The decoder is now
+a saccade state machine, after the optic-flow robots built on fly
+behaviour: one trigger starts one committed manoeuvre.
+
+```text
+cruise ──trigger──► freeze ──► (reverse) ──► turn until clear ──► refractory ──► cruise
+```
+
+* **Triggers:** DNp01 looming above `escape_threshold` (turn only), the
+  range sensor at or under `stop_cm` (back up, then turn), or the front
+  bumper (back up, then turn).
+* **Turn until clear:** the rotation ends when the range reads ≥ `clear_cm`
+  *and* the retina's loom drive is under `loom_clear`, but never before
+  `turn_min_s` and never after `turn_max_s`.
+* **Direction memory:** escapes within `memory_s` of each other keep the
+  same turning direction, so two facing walls do not make it ping-pong.
+  Otherwise it turns away from the DNp01 side, else away from the fuller
+  eye, else a coin flip.
+* **Escalation:** the `escalate_after`-th escape inside `memory_s` backs up
+  twice as long and turns about twice the minimum — it gives up on that
+  heading.
+* **Cruise speed** scales with DNg100 activity between `min_speed` and
+  `max_speed` and drops 30 % inside `2 × stop_cm`.
+
+Tunables in `fly_controller.py: Policy` (times are seconds; the controller
+converts them to ticks with `--hz`, so they mean the same at 5 Hz on the
+phone and 10 Hz on the laptop):
+
+| Field | Default | |
+|---|---|---|
+| `stop_cm` | 30 | range trigger (matches the firmware's own stop) |
+| `clear_cm` | 45 | range needed to end a turn (`--clear-cm`) |
+| `freeze_s` | 0.2 | STOP before the manoeuvre |
+| `reverse_s` | 0.7 | back-up time for range/bumper triggers |
+| `turn_min_s` | 0.6 | shortest saccade |
+| `turn_max_s` | 4.0 | give up turning after this |
+| `refractory_s` | 0.8 | ignore DNp01 after a manoeuvre |
+| `memory_s` | 8 | window for direction memory and escalation |
+| `escalate_after` | 3 | n-th escape in the window escalates |
+| `loom_clear` | 0.3 | retina loom drive that still counts as clear |
+| `escape_threshold` / `steer_threshold` | 0.2 / 0.2 | DNp01 / DNa02 EMA thresholds |
 
 Independent of these, the ESP32 stops at ≤ 30 cm (or LD2420 presence),
 latches its own e-stop, and halts if heartbeats stop for 1.5 s.
@@ -122,5 +204,5 @@ loom+threat L 0.8           0.900     0.027    0.000    0.020
 chase L 0.6 (LC10a)         0.007     0.007    0.067    0.000
 ```
 
-Escape is strongly ipsilateral and clean; steering (DNa02) is weak, hence
-`--steer-threshold 0.04`. Encoder gains live in `vision.py: ENCODER`.
+Escape is strongly ipsilateral and clean; steering (DNa02) is weak.
+Encoder gains live in `vision.py: ENCODER`.

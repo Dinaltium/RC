@@ -22,9 +22,11 @@ struct MotorPins {
 // physically connected in the 2-motor build; GPIO23 is used for DRV8833 EEP.
 static constexpr uint8_t PIN_UNUSED = 0xFF;
 
+// SWAP_LEFT_RIGHT (config.h) exchanges the two pin sets so that "left"
+// really is the left wheel on a chassis whose drivers were wired mirrored.
 static const MotorPins motorPins[MOTOR_COUNT] = {
-    { FL_IN1,     FL_IN2,     FL_INVERT },  // Front Left
-    { FR_IN1,     FR_IN2,     FR_INVERT },  // Front Right
+    { SWAP_LEFT_RIGHT ? FR_IN1 : FL_IN1, SWAP_LEFT_RIGHT ? FR_IN2 : FL_IN2, FL_INVERT },  // Left
+    { SWAP_LEFT_RIGHT ? FL_IN1 : FR_IN1, SWAP_LEFT_RIGHT ? FL_IN2 : FR_IN2, FR_INVERT },  // Right
     { PIN_UNUSED, PIN_UNUSED, RL_INVERT },  // Rear Left  — not wired
     { PIN_UNUSED, PIN_UNUSED, RR_INVERT }   // Rear Right — not wired
 };
@@ -53,7 +55,8 @@ void motorInit() {
     }
 
     _stopped = true;
-    Serial.println(F("[MOTOR] Initialized — 2 motors, EEP GPIO23 HIGH"));
+    Serial.print(F("[MOTOR] Initialized — 2 motors, EEP GPIO23 HIGH, L/R "));
+    Serial.println(SWAP_LEFT_RIGHT ? F("swapped") : F("as wired"));
 }
 
 // ============================================================

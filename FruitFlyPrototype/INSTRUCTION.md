@@ -1,6 +1,14 @@
 # Robot Prototype Instructions
 ## Arduino IDE / Arduino CLI
 
+> **Historical spec — the built robot has two wheels, not four.**
+> This file is the original four-motor requirements document, kept for
+> reference. The firmware in this folder drives **two** motors (left on
+> GPIO 16/17, right on GPIO 18/19, `EEP` enable on GPIO 23) and re-uses
+> GPIO 21/22 for I²C and GPIO 25 for a ToF `XSHUT`. Where this document
+> and `README.md` / `WIRING.md` / `RobotPrototype/config.h` disagree, the
+> latter three are correct.
+
 ## 1. Objective
 
 Build the first working prototype of a 4-wheel ESP32 robot using:

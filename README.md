@@ -2,6 +2,14 @@
 
 A modular, safety-first 4-wheel robot controller built for ESP32 and ESP32-CAM using pure Arduino C++ (Arduino IDE 2.x & Arduino CLI compatible).
 
+> **Building the two-wheel robot?** This folder is the original four-motor
+> reference design and its firmware drives four motors. The robot actually
+> on the bench is the two-motor FruitFly build in
+> [`FruitFlyPrototype/`](FruitFlyPrototype/README.md) — flash
+> `FruitFlyPrototype/RobotPrototype`, and use
+> [`FruitFlyPrototype/WIRING.md`](FruitFlyPrototype/WIRING.md) for the GPIO
+> map. The pin tables below apply to the four-motor design only.
+
 ---
 
 ## 1. System Architecture

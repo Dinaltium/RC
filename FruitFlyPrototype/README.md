@@ -1,6 +1,6 @@
-# ESP32 4-Wheel Robot Prototype
+# ESP32 2-Wheel Robot Prototype (FruitFly fork)
 
-A modular, safety-first robot controller built for ESP32 using pure Arduino C++ (Arduino IDE 2.x & Arduino CLI compatible).
+A modular, safety-first **two-motor** robot controller built for ESP32 using pure Arduino C++ (Arduino IDE 2.x & Arduino CLI compatible). The original four-motor project is unchanged in `C:\Projects\RC\RobotPrototype`.
 
 > **FruitFly fork.** This copy is driven by a host-side fruit-fly connectome (`FruitFlyHost/`) and uses two motors. What differs from the base firmware described below:
 >
@@ -33,16 +33,16 @@ A modular, safety-first robot controller built for ESP32 using pure Arduino C++ 
                                    │
               ┌────────────────────┼────────────────────┐
               ▼                    ▼                    ▼
-         DRV8833 #1–#4       Ultrasonic Sensor     ESP-NOW Receiver
-         4 × BO Motors        (HC-SR04 + Divider)         ▲
-                                                          │ ESP-NOW (Ch 1)
-                                                   ┌──────┴──────┐
-                                                   │  ESP32-CAM  │
-                                                   │  Fallback   │
-                                                   └─────────────┘
+        DRV8833 #1 + #2      Front range sensor    Bump / cliff / OLED
+        2 × BO Motors        (HC-SR04 default)     (compile-guarded)
+        (bridges paralleled)
 ```
 
-> **Safety Invariant**: The main ESP32 is the **only** device that directly manipulates motor GPIO. Remote sources (Phone, ESP32-CAM, Serial) can only produce commands that pass through arbitration and local obstacle safety checks.
+An ESP32-CAM, when fitted, is a plain Wi-Fi camera on the same AP
+(`192.168.4.20/stream`). Its ESP-NOW fallback role is compiled out by
+default (`ENABLE_ESPNOW`).
+
+> **Safety Invariant**: The main ESP32 is the **only** device that directly manipulates motor GPIO. Remote sources (Phone, host bridge, Serial) can only produce commands that pass through arbitration and local obstacle safety checks.
 
 ---
 
@@ -54,7 +54,7 @@ Commands are arbitrated in the `ControlManager` with strict priority:
 2. **Local Obstacle Safety** (Ultrasonic hysteresis: stop at $\le 30\text{ cm}$, clear at $\ge 35\text{ cm}$)
 3. **PHONE_WIFI** (Primary phone control over Access Point)
 4. **PHONE_BLUETOOTH** (Optional fallback, compile-guarded)
-5. **ESP32_CAM_ESPNOW** (Secondary controller fallback over ESP-NOW)
+5. **ESP32_CAM_ESPNOW** (Secondary controller fallback over ESP-NOW — compiled out by default in this fork)
 6. **NONE → STOP** (Failsafe stop if no valid heartbeat received within $1500\text{ ms}$)
 
 ### Failover Timeline
@@ -64,7 +64,7 @@ Phone Wi-Fi Heartbeat (500 ms)
          │
          ├── Missing for > 1500 ms?
          ▼
-Failover to Bluetooth (if enabled) or ESP32-CAM ESP-NOW
+Failover to Bluetooth / ESP-NOW (both disabled by default here)
          │
          ├── Missing for > 1500 ms?
          ▼
@@ -75,9 +75,9 @@ Automatic Motor STOP (Failsafe)
 
 ## 3. Hardware & GPIO Wiring
 
-### A. Motor Drivers (4 × DRV8833 Modules)
+### A. Motor Drivers (2 × DRV8833 Modules)
 
-#### Current two-motor setup: bridged for higher current
+#### Two-motor setup: bridged for higher current
 
 If each motor's startup or stall current can approach 1.5 A, use **two
 DRV8833 modules**, one module per motor, with both internal H-bridges
@@ -105,12 +105,11 @@ Driver module 2 → Motor 2:
 
 For both modules: `VCC` goes to the regulated 5–6 V motor rail, `GND` goes to
 common ground, and `EEP` is driven HIGH by the firmware from **GPIO23**. `ULT`
-may remain disconnected until fault monitoring is added. Leave the rear motor
-GPIO signals and rear driver outputs unused for now.
+may remain disconnected until fault monitoring is added.
 
 If each motor is comfortably below one bridge's continuous and stall-current
-limits, one module can instead drive two motors normally using `IN1/IN2` and
-`IN3/IN4`.
+limits, a single module can instead drive both motors normally using `IN1/IN2`
+and `IN3/IN4` — but then GPIO 18/19 feed that same module's second input pair.
 
 Each motor is assigned to its own DRV8833 module. For higher current, this
 project uses the two H-bridges **inside each DRV8833 in parallel**. This is
@@ -127,10 +126,19 @@ parallel the A and B bridges on the same chip, as described below.
 
 | Motor | DRV8833 Board | ESP32 IN1 | ESP32 IN2 | Inversion Config (`config.h`) |
 |---|---|---|---|---|
-| **Front Left** | Module #1 | **GPIO 16** | **GPIO 17** | `FL_INVERT` |
-| **Front Right** | Module #2 | **GPIO 18** | **GPIO 19** | `FR_INVERT` |
-| **Rear Left** | Module #3 | **GPIO 21** | **GPIO 22** | `RL_INVERT` |
-| **Rear Right** | Module #4 | **GPIO 23** | **GPIO 25** | `RR_INVERT` |
+| **Left** | Module #1 | **GPIO 16** | **GPIO 17** | `FL_INVERT` |
+| **Right** | Module #2 | **GPIO 18** | **GPIO 19** | `FR_INVERT` |
+| *(both modules)* | `EEP` enable | **GPIO 23** | — | driven HIGH at boot |
+
+Only these two motors exist in this build. GPIO 21/22 are the I²C bus
+(VL53L0X + OLED) and GPIO 25 is the forward VL53L0X `XSHUT` — they are **not**
+rear-motor pins any more. The `RL_*` / `RR_*` names still in `config.h` are
+inherited from the four-motor original and are never initialised or driven.
+
+**Left and right swapped?** `SWAP_LEFT_RIGHT = true` in `config.h` exchanges
+the two pin sets in software, because this chassis was wired with the modules
+mirrored. Set it `false` only after re-wiring the harness. Forward/backward
+are unaffected either way.
 
 For each module in bridged mode, use this board's actual labels:
 
@@ -150,16 +158,16 @@ OUT4 ──────────┘
 
 #### Complete per-module connection table
 
-| Driver connection | Module #1 | Module #2 | Module #3 | Module #4 |
-|---|---|---|---|---|
-| `IN1` + `IN3` | GPIO 16 | GPIO 18 | GPIO 21 | GPIO 23 |
-| `IN2` + `IN4` | GPIO 17 | GPIO 19 | GPIO 22 | GPIO 25 |
-| `OUT1` + `OUT3` | FL motor lead 1 | FR motor lead 1 | RL motor lead 1 | RR motor lead 1 |
-| `OUT2` + `OUT4` | FL motor lead 2 | FR motor lead 2 | RL motor lead 2 | RR motor lead 2 |
-| `VCC` | regulated motor rail | regulated motor rail | regulated motor rail | regulated motor rail |
-| `GND` | common ground | common ground | common ground | common ground |
-| `EEP` (sleep/enable) | GPIO23 HIGH | GPIO23 HIGH | GPIO23 HIGH | GPIO23 HIGH |
-| `ULT` (fault) | leave open or monitor | leave open or monitor | leave open or monitor | leave open or monitor |
+| Driver connection | Module #1 (left) | Module #2 (right) |
+|---|---|---|
+| `IN1` + `IN3` | GPIO 16 | GPIO 18 |
+| `IN2` + `IN4` | GPIO 17 | GPIO 19 |
+| `OUT1` + `OUT3` | left motor lead 1 | right motor lead 1 |
+| `OUT2` + `OUT4` | left motor lead 2 | right motor lead 2 |
+| `VCC` | regulated motor rail | regulated motor rail |
+| `GND` | common ground | common ground |
+| `EEP` (sleep/enable) | GPIO 23 HIGH | GPIO 23 HIGH |
+| `ULT` (fault) | leave open or monitor | leave open or monitor |
 
 On this board family, `EEP` is the sleep/enable input. Keep the factory
 enable jumper installed or connect `EEP` to a logic-high supply as documented
@@ -187,6 +195,10 @@ Battery GND ──┬── driver GNDs
               ├── ESP32 GND
               └── sensor GND
 ```
+
+With two motors the peak draw is roughly half the original four-motor
+figure, but still size the pack, fuse and buck converter for **stall**
+current, not running current.
 
 Recommended baseline for 5–6 V motors is a 2S Li-ion/LiPo pack (7.4 V
 nominal, 8.4 V full) followed by a regulated 5–6 V motor buck converter.
@@ -216,13 +228,16 @@ motor rail. Do not power the motors from the ESP32 3.3 V or 5 V regulator.
   desired.
 * Do not exceed the motor's stall current or the driver/module thermal limit.
   Current limiting and protection do not make an undersized power supply safe.
-* Test one motor at low PWM first, then test each bridged module for heat
-  before installing all four motors.
+* Test one motor at low PWM first, then check each bridged module for heat
+  before running both motors under load.
 
-### B. Ultrasonic Sensor (HC-SR04)
+### B. Front range sensor
 
-The current copied firmware is configured for **HLK-LD2420 presence mode**
-(`USE_LD2420 = true` in `RobotPrototype/config.h`). For the LD2420, use:
+`config.h` selects exactly one of three front sensors. The default is
+`#define FRONT_RANGE_HCSR04`; the alternatives are `FRONT_RANGE_LD2420`
+(presence radar) and `FRONT_RANGE_VL53L0X` (ToF on I²C, `XSHUT` on GPIO 25).
+
+#### HLK-LD2420 presence radar (`FRONT_RANGE_LD2420`)
 
 ```text
 LD2420 3V3 → ESP32 3V3
@@ -235,22 +250,26 @@ instead of `OT2`; verify the module's manual. HIGH means presence and LOW
 means clear. The current firmware treats presence as an obstacle and reports
 `distance_cm: 0.0`. UART configuration and actual range data are not yet used.
 
-To return to HC-SR04 mode, set `USE_LD2420` to `false` and use the wiring
-below, including the resistor divider.
+#### HC-SR04 ultrasonic (`FRONT_RANGE_HCSR04`, default)
 
 * `VCC` → 5V
 * `GND` → Common Ground
 * `TRIG` → **GPIO 26**
-* `ECHO` → **GPIO 27** via the available **10 kΩ / 20 kΩ Voltage Divider**:
+* `ECHO` → **GPIO 27** via a **1 kΩ / 2 kΩ voltage divider**:
   ```text
-  HC-SR04 ECHO (5V) ──[ 10 kΩ ]──┬── GPIO 27 (≈3.3V)
-                                 │
-                            [ 10 kΩ ]
-                                 │
-                            [ 10 kΩ ]
-                                 │
-                                GND
+  HC-SR04 ECHO (5V) ──[ 1 kΩ ]──┬── GPIO 27 (3.3 V safe)
+                                │
+                             [ 2 kΩ ]
+                                │
+                               GND
   ```
+
+A 10 kΩ / 20 kΩ divider works electrically too; `WIRING.md` specifies 1 k/2 k
+because the lower impedance picks up less motor noise on a long ECHO lead.
+The echo edge is read by interrupt, so the main loop never blocks.
+
+Bump switches, cliff sensors, the OLED and the complete GPIO map are in
+`WIRING.md`.
 
 The ESP32, driver boards, HC-SR04, and buck converter output must share a
 common ground. Keep the HC-SR04 ECHO divider physically close to GPIO 27 and
@@ -407,7 +426,7 @@ works purely as a Wi-Fi camera without any of the steps above.
 
 ### B. Physical Hardware Verification (To be completed on bench)
 - [ ] One motor (direction & speed test)
-- [ ] Four motors (direction inversion calibration)
+- [ ] Both motors (direction inversion + `SWAP_LEFT_RIGHT` calibration)
 - [ ] Forward movement
 - [ ] Backward movement
 - [ ] Left differential turn
@@ -416,15 +435,19 @@ works purely as a Wi-Fi camera without any of the steps above.
 - [ ] Normal Stop
 - [ ] Latched Emergency Stop & Clear
 - [ ] PWM speed scaling (0–255)
+- [ ] Bridged DRV8833 modules stay cool under load
 - [ ] Ultrasonic distance accuracy with voltage divider
 - [ ] Obstacle safety hysteresis (stop at ≤30 cm, clear at ≥35 cm)
 - [ ] Wi-Fi Soft AP connection (`RobotPrototype`)
 - [ ] Phone web UI control
 - [ ] Wi-Fi heartbeat timeout failover (1500 ms)
-- [ ] ESP-NOW peer heartbeat receipt (500 ms)
-- [ ] ESP-NOW remote movement commands
-- [ ] ESP-NOW failover when Wi-Fi disconnects
 - [ ] Failsafe motor halt when all controllers disconnect
+- [ ] Bump endstops halt the robot (`ENABLE_BUMP`)
+- [ ] Cliff pair halts the robot at a table edge (`ENABLE_TOF_CLIFF`)
+- [ ] OLED shows state, range and command source (`ENABLE_OLED`)
+
+The ESP-NOW items from the base project do not apply here: the receiver is
+compiled out in this fork.
 
 ---
 
